@@ -8,6 +8,8 @@
     dict_chars_count equ 0x11
     dict_array equ 0x12
     dict_encoding_array equ 0x20
+    decimal_value equ 0x35
+    ascii_value equ 0x36
     
     
             
@@ -101,12 +103,37 @@ high_priority_interrupt
 		
 	send_encoded_string
 	    clrf tmp1
+	    clrf tmp2
 	    lfsr FSR0,string_array
 	    lfsr FSR1,dict_array
+	    lfsr FSR2, dict_encoding_array
 	    loop_send_encoded_string
-		movf dict_chars_count,w
+		movf string_chars_count,w
 		cpfslt tmp1
-		;do not know how yet
+		retfie
+		loop_dict
+		    movf dict_chars_count,w
+		    cpfslt tmp2
+		    nop;we can't get here
+		    movf INDF0,w
+		    cpfseq INDF1
+			bra check_next_character_in_dict2
+			movff INDF2,decimal_value
+			call decimal_to_ascii
+			movf ascii_value,w
+			call UART_transmit_character_nospace
+			movf POSTINC0,w
+			incf tmp1
+			clrf tmp2
+			lfsr FSR1,dict_array
+			lfsr FSR2,dict_encoding_array
+			bra loop_send_encoded_string
+		
+		    check_next_character_in_dict2
+			incf tmp2
+			movf POSTINC1,w
+			movf POSTINC2,w
+			bra loop_dict
 		
 		
     init
@@ -142,6 +169,20 @@ high_priority_interrupt
 	    movlw 0x20
 	    movwf TXREG
     return
+    
+    
+    UART_transmit_character_nospace
+	    movwf TXREG
+	    waiting_on_transmission_nospace
+		btfss TXSTA,TRMT
+		bra waiting_on_transmission_nospace
+    return
+    
+    decimal_to_ascii
+	movf decimal_value,w
+	addlw 0x30
+	movwf ascii_value
+	return
     
     
     end
